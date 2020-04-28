@@ -1,8 +1,8 @@
 # Udacity DevOps Nanodegree Project2
 
 ## Project Requirements
----
-> ### The Basics
+
+> #### The Basics
 
 |CRITERIA|MEETS SPECIFICATIONS|COMPLETED|
 |---|---|---|
@@ -11,14 +11,14 @@
 |Outputs|This is optional, but it would be nice to have a URL here with the Load Balancer DNS Name and “http” in front of it .||
 |Working Test|If the student provides a URL to verify his work is running properly, it will be a page that says “it works! Udagram, Udacity”||
 
-> ### Load Balancer
+> #### Load Balancer
 
 |CRITERIA|MEETS SPECIFICATIONS|COMPLETED|
 |---|---|---|
 |Target Group|The auto-scaling group needs to have a property that associates it with a target group. The Load Balancer will have a Listener rule associated with the same target group||
 |Health Check and Listener|Port 80 should be used in Security groups, health checks and listeners associated with the load balancer||
 
-> ### Auto-Scaling
+> #### Auto-Scaling
 
 |CRITERIA|MEETS SPECIFICATIONS|COMPLETED|
 |---|---|---|
@@ -26,7 +26,7 @@
 |Machine Specs|The machine should have 10 GB or more of disk and should be a t3.small or better.||
 |SSH Key|There shouldn’t be a ‘keyname’ property in the launch config||
 
-> ### Bonus
+> #### Bonus
 
 |CRITERIA|MEETS SPECIFICATIONS|COMPLETED|
 |---|---|---|
@@ -34,8 +34,7 @@
 |Bastion Host|Any resource of type `AWS::EC2::Instance`, optional, but nice to have.|
 
 ## Solution
----
 
-> ### Diagram
+> #### Diagram
 
 ![Diagram](/docs/Project_#2_Udacity_CDE_nanodegree.png)
