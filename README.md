@@ -38,4 +38,4 @@
 
 > ### Diagram
 
-![Diagram](/docs/Project_#2_Udacity_CDE_nanodegree.png)
+![Diagram](/docs/Project_2_Udacity_CDE_nanodegree.png)
