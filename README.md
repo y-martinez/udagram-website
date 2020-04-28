@@ -37,8 +37,4 @@
 
 > #### Diagram
 
-<<<<<<< HEAD
 ![Diagram](/docs/Project_2_Udacity_CDE_nanodegree.png)
-=======
-![Diagram](/docs/Project_#2_Udacity_CDE_nanodegree.png)
->>>>>>> 74d3d46df13a4a32ca27b79eb6c758c34cf5f856
