@@ -1,0 +1,61 @@
+Description: >
+  Ybrahin Martinez - Udagram Project
+
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+  
+Resources:
+
+  UdagramRolIAM:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-Udagram-Role"
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+
+  UdagramPolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub "${EnvironmentName}-Udagram-Policies"
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action: 
+          - "ec2:DescribeAddresses"
+          - "ec2:AllocateAddress"
+          - "ec2:DescribeInstances"
+          - "ec2:AssociateAddress"
+          - "ssm:Get*"
+          - "s3:Get*"
+          Resource: '*'
+      Roles:
+      - !Ref UdagramRolIAM
+      
+  UdagramInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+      - !Ref UdagramRolIAM
+
+Outputs: 
+  UdagramRol:
+    Description: Udagram Rol
+    Value: !Ref UdagramRolIAM
+    Export:
+      Name: !Sub ${EnvironmentName}-UdagramRol
+
+  InstanceProfile:
+    Description: Instance profile of Udagram Rol
+    Value: !Ref UdagramInstanceProfile
+    Export:
+      Name: !Sub ${EnvironmentName}-InstanceProfile

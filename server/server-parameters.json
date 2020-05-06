@@ -1,0 +1,15 @@
+[
+	{
+		"ParameterKey": "EnvironmentName",
+		"ParameterValue": "UdacityUdagramProject"
+    },
+    {
+		"ParameterKey": "InstanceType",
+		"ParameterValue": "t3.small"
+    },
+    {
+        "ParameterKey": "InstanceAMI",
+        "ParameterValue": "ami-003634241a8fcdec0"
+    }
+
+]

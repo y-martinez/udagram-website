@@ -1,0 +1,225 @@
+Description: >
+  Ybrahin Martinez - Udagram Project
+
+Parameters:
+
+  EnvironmentName:
+      Description: An environment name that will be prefixed to resource names
+      Type: String
+
+  InstanceType:
+    Description: The instance type to use for the bastion host
+    Default: t3.small
+    Type: String
+    
+  InstanceAMI:
+    Type: String
+    Default: ami-07ebfd5b3428b6f4d
+    Description: AMI of a bastion host instance to use
+
+Resources:
+  LoadBalancerSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http to our load balancer
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: name
+          Value: !Sub ${EnvironmentName} SecGroup of Load Balancer
+
+  WebAppSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription:  Allow ssh connections from Bastion HOST
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        SourceSecurityGroupId:
+          Fn::ImportValue:
+            !Sub ${EnvironmentName}-SSHSecurityGroup
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !Ref LoadBalancerSG
+      Tags:
+        - Key: name
+          Value: !Sub ${EnvironmentName} SecGroup of EC2 instances with the webserver
+  
+  WebHostsAutoSG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName: !Ref WebHostsLaunchConfig
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub "${EnvironmentName}-PRIVATE-NETS"
+      MinSize: 4
+      MaxSize: 6
+      DesiredCapacity: 4
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-WebHostsAutoSG
+        PropagateAtLaunch: True
+      TargetGroupARNs:
+      - Ref: WebAppTargetGroup
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: True
+
+  WebHostsLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !Ref InstanceAMI
+      IamInstanceProfile:
+        Fn::ImportValue:
+          !Sub ${EnvironmentName}-InstanceProfile
+      SecurityGroups:
+      - !Ref WebAppSG
+      InstanceType: !Ref InstanceType
+      BlockDeviceMappings:
+      - DeviceName: "/dev/sdk"
+        Ebs:
+          VolumeSize: '10'
+          DeleteOnTermination: true
+          VolumeType: "gp2"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt update
+          apt install unzip apache2 -y
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+
+          aws ssm get-parameter --name udagramBastionKey --with-decryption --output text --query Parameter.Value --region ${AWS::Region} > authorized_keys
+          cp ./authorized_keys /home/ubuntu/.ssh/
+          chmod 700 /home/ubuntu/.ssh/authorized_keys
+
+          cd /var/www/html
+          rm index.html
+          aws s3 cp s3://udagram-s3-store/udacity.zip . 
+          unzip -o udacity.zip
+          mv src/index.html .
+          rm -R src
+
+          chown -R www-data:www-data .
+          systemctl start apache2.service
+
+
+  WebAppLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUBLIC1-SN"
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUBLIC2-SN"
+      SecurityGroups:
+      - Ref: LoadBalancerSG
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn: !Ref WebAppTargetGroup
+      LoadBalancerArn: !Ref WebAppLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  LoadBalancerListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WebAppTargetGroup
+        Conditions:
+        - Field: path-pattern
+          Values: [/]
+        ListenerArn: !Ref Listener
+        Priority: 1
+
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 80
+      Protocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+      VpcId: 
+        Fn::ImportValue: !Sub "${EnvironmentName}-VPCID"      
+
+  AppScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebHostsAutoSG
+      Cooldown: 60
+      ScalingAdjustment: 1
+
+  AppScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebHostsAutoSG
+      Cooldown: 300
+      ScalingAdjustment: -1
+  
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: "CpuHigh"
+      AlarmDescription: Scale-up if CPU usage is > 80% for 5 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 80
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions:
+      - !Ref AppScaleUpPolicy
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref WebHostsAutoSG
+
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Scale-down if CPU usage is < 60% for 5 minutes
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 60
+      ComparisonOperator: LessThanThreshold
+      AlarmActions:
+      - !Ref AppScaleDownPolicy
+      Dimensions:
+      - Name: AutoScalingGroupName
+        Value: !Ref WebHostsAutoSG
+
+Outputs:
+ 
+  WebsiteURL:
+    Description: DNS Name of the web application throught the Load Balancer
+    Value: !Sub http://${WebAppLoadBalancer.DNSName}
+    Export:
+      Name: !Sub ${EnvironmentName}-DNS-NAME

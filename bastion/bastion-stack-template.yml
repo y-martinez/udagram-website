@@ -1,0 +1,125 @@
+Description: >
+  Ybrahin Martinez - Udagram Project
+
+
+  This stack deploys a bastion instance, with a pair of public and private subnets spread 
+  across two Availabilty Zones. It deploys an Internet Gateway, with a default 
+  route on the public subnets. It deploys a pair of NAT Gateways (one in each AZ), 
+  and default routes for them in the private subnets.
+Parameters:
+
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  InstanceType:
+    Description: The instance type to use for the bastion host
+    Default: t3.small
+    Type: String
+    
+  InstanceAMI:
+    Type: String
+    Default: ami-07ebfd5b3428b6f4d
+    Description: AMI of a bastion host instance to use
+
+  SSHLocation:
+    Description: Network allowed to connect using ssh to bastion host in public subnet.
+    Default: 0.0.0.0/0
+    Type: String
+
+  KeyName:
+    Description: Keypair for Linux bastion host
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: udagramBastionKey
+
+Resources:
+
+  BastionSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow ssh connection to bastion host
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: name
+          Value: !Sub ${EnvironmentName} SecGroup Bastion Hosts
+
+  ElasticIpBastion:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain:
+        Fn::ImportValue: !Sub ${EnvironmentName}-VPCID
+
+  BastionAutoSG:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      LaunchConfigurationName: !Ref BastionLaunchConfig
+      VPCZoneIdentifier:
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PUBLIC1-SN
+        - Fn::ImportValue: !Sub ${EnvironmentName}-PUBLIC2-SN
+      MinSize: 1
+      MaxSize: 2
+      DesiredCapacity: 1
+      Tags:
+      - Key: Name
+        Value: !Sub ${EnvironmentName}-BastionAutoSG
+        PropagateAtLaunch: True
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: True
+
+  BastionLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: !Ref InstanceAMI
+      KeyName: !Ref KeyName
+      IamInstanceProfile:
+        Fn::ImportValue:
+          !Sub ${EnvironmentName}-InstanceProfile
+      SecurityGroups:
+      - !Ref BastionSecGroup
+      InstanceType: !Ref InstanceType
+      BlockDeviceMappings:
+      - DeviceName: "/dev/sdk"
+        Ebs:
+          VolumeSize: '10'
+      UserData:
+        Fn::Base64: 
+          Fn::Sub:
+            - |
+              #!/bin/bash
+              apt update
+              apt install unzip
+              curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+              unzip awscliv2.zip
+              ./aws/install
+              instance_id=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
+
+              aws ec2 associate-address --instance-id $instance_id --allow-reassociation  --region ${AWS::Region} --allocation-id ${EIPAllocation}
+              aws ssm get-parameter --name udagramBastionKeyPrivate --with-decryption --output text --query Parameter.Value > /home/ubuntu/.ssh/id_rsa
+              chown ubuntu:ubuntu /home/ubuntu/.ssh/id_rsa
+              chmod 700 /home/ubuntu/.ssh/id_rsa
+            - EIPAllocation: !GetAtt ElasticIpBastion.AllocationId
+Outputs:
+  BastionPublicIPAddress:
+    Description: Bastion host public IP
+    Value: !Ref ElasticIpBastion
+    Export:
+      Name: !Sub ${EnvironmentName}-BASTION-PUBLIC-IP
+  
+  BastionSecurityGroupSSH:
+    Description: Will use to allow SSH connections from the bastion host
+    Value: !Ref BastionSecGroup
+    Export:
+      Name: !Sub ${EnvironmentName}-SSHSecurityGroup

@@ -1,0 +1,24 @@
+[
+	{
+		"ParameterKey": "EnvironmentName",
+		"ParameterValue": "UdacityUdagramProject"
+    },
+	{
+		"ParameterKey": "InstanceType",
+		"ParameterValue": "t3.nano"
+    },
+    {
+        "ParameterKey": "InstanceAMI",
+        "ParameterValue": "ami-003634241a8fcdec0"
+    },
+    {
+        "ParameterKey": "KeyName",
+        "ParameterValue": "udagramBastionKey"
+    },
+    {
+        "ParameterKey": "SSHLocation",
+        "ParameterValue": "0.0.0.0/0"
+    }
+
+
+]
